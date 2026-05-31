@@ -1,61 +1,35 @@
 package com.practice.springAI.controller;
 
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.DefaultChatClient;
-import org.springframework.ai.image.ImageModel;
-import org.springframework.ai.image.ImagePrompt;
-import org.springframework.ai.image.ImageResponse;
-import org.springframework.ai.openai.OpenAiImageModel;
-import org.springframework.ai.openai.OpenAiImageOptions;
-import org.springframework.util.MimeTypeUtils;
+import com.practice.springAI.dto.ApiResponse;
+import com.practice.springAI.service.ImageService;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.util.function.Consumer;
-
+@Validated
 @RestController
+@RequestMapping("/image")
 public class ImageGenController {
 
-    private ChatClient chatClient;
+    private final ImageService imageService;
 
-    private OpenAiImageModel openAiImageModel;
-
-    public ImageGenController(OpenAiImageModel openAiImageModel, ChatClient.Builder builder){
-        this.openAiImageModel = openAiImageModel;
-        chatClient = builder.build();
+    public ImageGenController(ImageService imageService) {
+        this.imageService = imageService;
     }
 
-    @GetMapping("image/{query}")
-    public String generateImage(@PathVariable String query){
-
-        ImagePrompt imagePrompt = new ImagePrompt(query, OpenAiImageOptions
-                .builder()
-                .quality("hd")
-                .height(1024)
-                .style("natural")
-                .build());
-
-        ImageResponse imageResponse = openAiImageModel.call(imagePrompt);
-
-        return imageResponse.getResult().getOutput().getUrl();
+    @GetMapping("/{query}")
+    public ResponseEntity<ApiResponse<String>> generateImage(
+            @PathVariable @NotBlank @Size(max = 1000) String query) {
+        return ResponseEntity.ok(ApiResponse.ok(imageService.generate(query)));
     }
 
-    @PostMapping("image/describe")
-    public String describeImage(@RequestParam String query, @RequestParam MultipartFile file) throws IOException {
-
-        System.out.println(file.getOriginalFilename());
-        System.out.println(query);
-
-        Consumer<ChatClient.PromptUserSpec> userConsumer = userSpec -> {
-            userSpec.text(query)
-                    .media(MimeTypeUtils.IMAGE_JPEG, file.getResource());
-        };
-
-        return chatClient
-                .prompt()
-                .user(userConsumer)
-                .call()
-                .content();
+    @PostMapping("/describe")
+    public ResponseEntity<ApiResponse<String>> describeImage(
+            @RequestParam @NotBlank @Size(max = 500) String query,
+            @RequestParam MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.ok(imageService.describe(query, file)));
     }
 }

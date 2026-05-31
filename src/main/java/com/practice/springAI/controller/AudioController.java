@@ -1,50 +1,42 @@
 package com.practice.springAI.controller;
 
-import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
-import org.springframework.ai.openai.OpenAiAudioSpeechModel;
-import org.springframework.ai.openai.OpenAiAudioSpeechOptions;
-import org.springframework.ai.openai.OpenAiAudioTranscriptionModel;
-import org.springframework.ai.openai.OpenAiAudioTranscriptionOptions;
-import org.springframework.ai.openai.api.OpenAiAudioApi;
-import org.springframework.ai.openai.audio.speech.SpeechPrompt;
+import com.practice.springAI.dto.ApiResponse;
+import com.practice.springAI.service.AudioService;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+@Validated
 @RestController
+@RequestMapping("/api")
 public class AudioController {
 
-    private OpenAiAudioTranscriptionModel audioModel;
-    private OpenAiAudioSpeechModel speechModel;
+    private final AudioService audioService;
 
-    public AudioController(OpenAiAudioTranscriptionModel audioModel, OpenAiAudioSpeechModel speechModel){
-        this.audioModel = audioModel;
-        this.speechModel = speechModel;
+    public AudioController(AudioService audioService) {
+        this.audioService = audioService;
     }
 
-    @PostMapping("/api/speechToText")
-    public String speechToText(@RequestParam MultipartFile file){
-
-        OpenAiAudioTranscriptionOptions options = OpenAiAudioTranscriptionOptions
-                .builder()
-                //.language("hi")
-                .responseFormat(OpenAiAudioApi.TranscriptResponseFormat.SRT)
-                .build();
-        AudioTranscriptionPrompt prompt = new AudioTranscriptionPrompt(file.getResource(), options);
-        return audioModel.call(prompt).getResult().getOutput();
+    @PostMapping("/speechToText")
+    public ResponseEntity<ApiResponse<String>> speechToText(@RequestParam MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.ok(audioService.transcribe(file)));
     }
 
-    @PostMapping("/api/textToSpeech")
-    public byte[] textToSpeech(@RequestParam String text){
-
-        OpenAiAudioSpeechOptions options = OpenAiAudioSpeechOptions
-                .builder()
-                .speed(0.75f)
-                .voice("nova")
-                .build();
-        SpeechPrompt prompt = new SpeechPrompt(text, options);
-
-        return speechModel.call(prompt).getResult().getOutput();
+    @PostMapping("/textToSpeech")
+    public ResponseEntity<byte[]> textToSpeech(
+            @RequestParam @NotBlank @Size(max = 4096) String text) {
+        byte[] audio = audioService.synthesize(text);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"speech.mp3\"")
+                .contentType(MediaType.parseMediaType("audio/mpeg"))
+                .body(audio);
     }
 }
