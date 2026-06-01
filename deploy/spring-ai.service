@@ -1,0 +1,70 @@
+# ──────────────────────────────────────────────────────────────
+# systemd unit file for Spring AI Demo on AWS EC2
+#
+# SETUP INSTRUCTIONS:
+# 1. Build the jar locally:
+#      mvn package -DskipTests
+#
+# 2. Copy the jar to EC2:
+#      scp target/springAI-0.0.1-SNAPSHOT.jar ec2-user@<EC2_IP>:/opt/spring-ai/app.jar
+#
+# 3. Copy this file to the EC2 instance:
+#      scp deploy/spring-ai.service ec2-user@<EC2_IP>:/etc/systemd/system/spring-ai.service
+#
+# 4. Create the env file on EC2 (never commit real secrets):
+#      sudo nano /opt/spring-ai/.env
+#      → add: OPENAI_API_KEY=sk-...
+#      → add: APP_ENV=prod
+#      sudo chmod 600 /opt/spring-ai/.env
+#
+# 5. Enable and start the service:
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable spring-ai
+#      sudo systemctl start spring-ai
+#
+# 6. Tail logs:
+#      sudo journalctl -u spring-ai -f
+# ──────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Spring AI Demo
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+
+WorkingDirectory=/opt/spring-ai
+
+# Load secrets from a file — never inline secrets in this unit file
+EnvironmentFile=/opt/spring-ai/.env
+
+ExecStart=/usr/bin/java \
+  -Xms256m \
+  -Xmx512m \
+  -XX:+UseG1GC \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=/opt/spring-ai/logs/heapdump.hprof \
+  -Dspring.profiles.active=${APP_ENV} \
+  -Dlogging.file.name=/opt/spring-ai/logs/app.log \
+  -jar /opt/spring-ai/app.jar
+
+# Graceful stop — matches spring.lifecycle.timeout-per-shutdown-phase=30s
+TimeoutStopSec=35
+KillSignal=SIGTERM
+
+# Auto-restart on unexpected crash, but not on clean exit (code 0)
+Restart=on-failure
+RestartSec=10
+
+# Limit open files (handles large file uploads)
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spring-ai
+
+[Install]
+WantedBy=multi-user.target
